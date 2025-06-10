@@ -1,0 +1,494 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+.editor-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 3rem 2rem;
+    min-height: 100vh;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--notion-border);
+}
+
+.page-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--notion-text);
+    margin: 0;
+}
+
+.block {
+    margin: 0.5rem 0;
+    position: relative;
+    min-height: 1.5rem;
+}
+
+.block:hover .block-controls {
+    opacity: 1;
+}
+
+.block-controls {
+    position: absolute;
+    left: -40px;
+    top: 0;
+    opacity: 0;
+    transition: opacity 0.2s;
+    display: flex;
+    align-items: center;
+    height: 1.5rem;
+}
+
+.block-handle {
+    cursor: grab;
+    color: #ccc;
+    font-size: 0.8rem;
+    padding: 0.25rem;
+}
+
+.block-handle:hover {
+    color: var(--notion-text);
+}
+
+.block-content {
+    outline: none;
+    border: none;
+    width: 100%;
+    background: transparent;
+    font-family: inherit;
+    line-height: 1.6;
+    padding: 0.25rem 0;
+    resize: none;
+    overflow: hidden;
+}
+
+.block-content:focus {
+    background-color: var(--notion-hover);
+    border-radius: 3px;
+    padding: 0.25rem 0.5rem;
+}
+
+.block-content.heading-1 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--notion-text);
+}
+
+.block-content.paragraph {
+    font-size: 16px;
+    color: var(--notion-text);
+}
+
+.block-content.empty {
+    color: #999;
+}
+
+.block-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: white;
+    border: 1px solid var(--notion-border);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    z-index: 1000;
+    min-width: 200px;
+    display: none;
+}
+
+.block-menu.show {
+    display: block;
+}
+
+.block-menu-item {
+    padding: 0.75rem;
+    cursor: pointer;
+    border-bottom: 1px solid var(--notion-border);
+    display: flex;
+    align-items: center;
+}
+
+.block-menu-item:last-child {
+    border-bottom: none;
+}
+
+.block-menu-item:hover {
+    background-color: var(--notion-hover);
+}
+
+.block-menu-icon {
+    margin-right: 0.5rem;
+    font-size: 1.2rem;
+}
+
+.save-status {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    z-index: 1000;
+}
+
+.save-status.saving {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+.save-status.saved {
+    background-color: #d1fae5;
+    color: #065f46;
+}
+
+.save-status.error {
+    background-color: #fee2e2;
+    color: #991b1b;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="editor-container">
+    <!-- Header de la page -->
+    <div class="page-header">
+        <h1 class="page-title">{{ page_title }}</h1>
+        <small class="text-muted">Page d'édition test - NotionLike</small>
+    </div>
+    
+    <!-- Indicateur de sauvegarde -->
+    <div id="saveStatus" class="save-status" style="display: none;"></div>
+    
+    <!-- Conteneur des blocs -->
+    <div id="blocksContainer" class="blocks-container">
+        {% for block in blocks %}
+        <div class="block" data-block-id="{{ block.id }}" data-block-type="{{ block.type }}" data-position="{{ block.position }}">
+            <div class="block-controls">
+                <span class="block-handle">⋮⋮</span>
+            </div>
+            
+            {% if block.type == 'heading_1' %}
+                <textarea 
+                    class="block-content heading-1" 
+                    placeholder="Titre 1" 
+                    data-block-id="{{ block.id }}"
+                    rows="1">{{ block.content.text }}</textarea>
+            {% elif block.type == 'paragraph' %}
+                <textarea 
+                    class="block-content paragraph" 
+                    placeholder="Tapez '/' pour les commandes ou commencez à écrire..." 
+                    data-block-id="{{ block.id }}"
+                    rows="1">{{ block.content.text }}</textarea>
+            {% endif %}
+            
+            <!-- Menu contextuel pour changer le type de bloc -->
+            <div class="block-menu" id="menu-{{ block.id }}">
+                <div class="block-menu-item" data-type="paragraph">
+                    <span class="block-menu-icon">📝</span>
+                    <span>Paragraphe</span>
+                </div>
+                <div class="block-menu-item" data-type="heading_1">
+                    <span class="block-menu-icon">📋</span>
+                    <span>Titre 1</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+class NotionEditor {
+    constructor() {
+        this.blocks = new Map();
+        this.saveTimeout = null;
+        this.currentMenu = null;
+        this.init();
+    }
+    
+    init() {
+        this.loadBlocks();
+        this.setupEventListeners();
+        console.log('🚀 NotionEditor initialisé');
+    }
+    
+    loadBlocks() {
+        document.querySelectorAll('.block').forEach(blockEl => {
+            const blockId = blockEl.dataset.blockId;
+            const blockType = blockEl.dataset.blockType;
+            const textarea = blockEl.querySelector('.block-content');
+            
+            this.blocks.set(blockId, {
+                id: blockId,
+                type: blockType,
+                content: { text: textarea.value },
+                position: parseInt(blockEl.dataset.position)
+            });
+        });
+    }
+    
+    setupEventListeners() {
+        // Écouter les changements de contenu
+        document.addEventListener('input', (e) => {
+            if (e.target.classList.contains('block-content')) {
+                this.handleContentChange(e.target);
+            }
+        });
+        
+        // Écouter les touches spéciales
+        document.addEventListener('keydown', (e) => {
+            if (e.target.classList.contains('block-content')) {
+                this.handleKeydown(e);
+            }
+        });
+        
+        // Auto-resize des textareas
+        document.addEventListener('input', (e) => {
+            if (e.target.tagName === 'TEXTAREA') {
+                this.autoResize(e.target);
+            }
+        });
+        
+        // Menu contextuel
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('.block-menu-item')) {
+                this.handleMenuClick(e);
+            } else {
+                this.hideAllMenus();
+            }
+        });
+        
+        // Redimensionner au chargement
+        document.querySelectorAll('textarea').forEach(textarea => {
+            this.autoResize(textarea);
+        });
+    }
+    
+    handleContentChange(textarea) {
+        const blockId = textarea.dataset.blockId;
+        const block = this.blocks.get(blockId);
+        
+        if (block) {
+            block.content.text = textarea.value;
+            this.scheduleAutosave();
+        }
+    }
+    
+    handleKeydown(e) {
+        const textarea = e.target;
+        
+        // Détection de la commande '/'
+        if (e.key === '/' && textarea.value === '') {
+            e.preventDefault();
+            this.showBlockMenu(textarea);
+            return;
+        }
+        
+        // Créer un nouveau bloc en appuyant sur Entrée à la fin
+        if (e.key === 'Enter' && !e.shiftKey) {
+            const cursorPos = textarea.selectionStart;
+            const textLength = textarea.value.length;
+            
+            if (cursorPos === textLength) {
+                e.preventDefault();
+                this.createNewBlock(textarea);
+            }
+        }
+        
+        // Navigation avec les flèches
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            this.handleArrowNavigation(e, textarea);
+        }
+    }
+    
+    showBlockMenu(textarea) {
+        const blockEl = textarea.closest('.block');
+        const menu = blockEl.querySelector('.block-menu');
+        
+        this.hideAllMenus();
+        menu.classList.add('show');
+        this.currentMenu = menu;
+        
+        // Stocker la référence du textarea pour le menu
+        menu.dataset.targetTextarea = textarea.dataset.blockId;
+    }
+    
+    hideAllMenus() {
+        document.querySelectorAll('.block-menu.show').forEach(menu => {
+            menu.classList.remove('show');
+        });
+        this.currentMenu = null;
+    }
+    
+    handleMenuClick(e) {
+        const menuItem = e.target.closest('.block-menu-item');
+        const newType = menuItem.dataset.type;
+        const menu = menuItem.closest('.block-menu');
+        const blockId = menu.dataset.targetTextarea;
+        
+        this.changeBlockType(blockId, newType);
+        this.hideAllMenus();
+    }
+    
+    changeBlockType(blockId, newType) {
+        const blockEl = document.querySelector(`[data-block-id="${blockId}"]`);
+        const textarea = blockEl.querySelector('.block-content');
+        const currentText = textarea.value;
+        
+        // Mettre à jour le type dans nos données
+        const block = this.blocks.get(blockId);
+        if (block) {
+            block.type = newType;
+        }
+        
+        // Mettre à jour les classes CSS
+        textarea.className = `block-content ${newType.replace('_', '-')}`;
+        blockEl.dataset.blockType = newType;
+        
+        // Mettre à jour le placeholder
+        if (newType === 'heading_1') {
+            textarea.placeholder = 'Titre 1';
+        } else {
+            textarea.placeholder = "Tapez '/' pour les commandes ou commencez à écrire...";
+        }
+        
+        // Garder le focus et le contenu
+        textarea.focus();
+        this.autoResize(textarea);
+        this.scheduleAutosave();
+    }
+    
+    createNewBlock(currentTextarea) {
+        const currentBlock = currentTextarea.closest('.block');
+        const newBlockId = 'block_' + Date.now();
+        const position = this.blocks.size;
+        
+        // Créer le nouveau bloc
+        const newBlockEl = document.createElement('div');
+        newBlockEl.className = 'block';
+        newBlockEl.dataset.blockId = newBlockId;
+        newBlockEl.dataset.blockType = 'paragraph';
+        newBlockEl.dataset.position = position;
+        
+        newBlockEl.innerHTML = `
+            <div class="block-controls">
+                <span class="block-handle">⋮⋮</span>
+            </div>
+            <textarea 
+                class="block-content paragraph" 
+                placeholder="Tapez '/' pour les commandes ou commencez à écrire..." 
+                data-block-id="${newBlockId}"
+                rows="1"></textarea>
+            <div class="block-menu" id="menu-${newBlockId}">
+                <div class="block-menu-item" data-type="paragraph">
+                    <span class="block-menu-icon">📝</span>
+                    <span>Paragraphe</span>
+                </div>
+                <div class="block-menu-item" data-type="heading_1">
+                    <span class="block-menu-icon">📋</span>
+                    <span>Titre 1</span>
+                </div>
+            </div>
+        `;
+        
+        // Insérer après le bloc actuel
+        currentBlock.insertAdjacentElement('afterend', newBlockEl);
+        
+        // Ajouter aux données
+        this.blocks.set(newBlockId, {
+            id: newBlockId,
+            type: 'paragraph',
+            content: { text: '' },
+            position: position
+        });
+        
+        // Focus sur le nouveau bloc
+        const newTextarea = newBlockEl.querySelector('.block-content');
+        newTextarea.focus();
+        
+        this.scheduleAutosave();
+    }
+    
+    autoResize(textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.max(textarea.scrollHeight, 24) + 'px';
+    }
+    
+    scheduleAutosave() {
+        clearTimeout(this.saveTimeout);
+        this.showSaveStatus('saving');
+        
+        this.saveTimeout = setTimeout(() => {
+            this.saveBlocks();
+        }, 1000);
+    }
+    
+    async saveBlocks() {
+        try {
+            const blocksArray = Array.from(this.blocks.values());
+            
+            const response = await fetch('/editor/api/blocks', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ blocks: blocksArray })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                this.showSaveStatus('saved');
+                console.log('✅ Blocs sauvegardés:', result.blocks_saved);
+            } else {
+                this.showSaveStatus('error');
+                console.error('❌ Erreur de sauvegarde:', result.error);
+            }
+            
+        } catch (error) {
+            this.showSaveStatus('error');
+            console.error('❌ Erreur réseau:', error);
+        }
+    }
+    
+    showSaveStatus(status) {
+        const statusEl = document.getElementById('saveStatus');
+        statusEl.className = `save-status ${status}`;
+        statusEl.style.display = 'block';
+        
+        const messages = {
+            saving: '💾 Sauvegarde...',
+            saved: '✅ Sauvegardé',
+            error: '❌ Erreur de sauvegarde'
+        };
+        
+        statusEl.textContent = messages[status];
+        
+        if (status === 'saved') {
+            setTimeout(() => {
+                statusEl.style.display = 'none';
+            }, 2000);
+        }
+    }
+    
+    handleArrowNavigation(e, textarea) {
+        // TODO: Implémenter la navigation entre blocs avec les flèches
+        // Pour l'instant, on laisse le comportement par défaut
+    }
+}
+
+// Initialiser l'éditeur
+document.addEventListener('DOMContentLoaded', () => {
+    window.notionEditor = new NotionEditor();
+});
+</script>
+{% endblock %}

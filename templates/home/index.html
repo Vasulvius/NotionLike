@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="hero-section min-vh-100 d-flex align-items-center">
+    <div class="container">
+        <div class="row justify-content-center text-center">
+            <div class="col-lg-8">
+                <h1 class="display-4 fw-bold mb-4">
+                    <span class="text-primary">NotionLike</span>
+                    <br>
+                    <small class="text-muted fs-2">Votre espace de travail personnel</small>
+                </h1>
+                <p class="lead mb-5">{{ description }}</p>
+                
+                <div class="d-grid gap-2 d-md-block">
+                    <a href="{{ url_for('home.app') }}" class="btn btn-primary btn-lg me-md-3">
+                        <i class="bi bi-rocket-takeoff"></i> Commencer
+                    </a>
+                    <a href="#features" class="btn btn-outline-secondary btn-lg">
+                        <i class="bi bi-info-circle"></i> En savoir plus
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<section id="features" class="py-5 bg-light">
+    <div class="container">
+        <div class="row">
+            <div class="col-lg-4 mb-4">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-body text-center">
+                        <i class="bi bi-file-text display-4 text-primary mb-3"></i>
+                        <h5 class="card-title">Édition riche</h5>
+                        <p class="card-text">Créez des documents avec du texte formaté, des listes, des images et plus encore.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4 mb-4">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-body text-center">
+                        <i class="bi bi-folder-fill display-4 text-success mb-3"></i>
+                        <h5 class="card-title">Organisation</h5>
+                        <p class="card-text">Organisez vos pages en workspaces et hiérarchies pour une structure claire.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4 mb-4">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-body text-center">
+                        <i class="bi bi-search display-4 text-warning mb-3"></i>
+                        <h5 class="card-title">Recherche</h5>
+                        <p class="card-text">Trouvez rapidement ce que vous cherchez dans tous vos contenus.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
